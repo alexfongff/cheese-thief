@@ -1055,21 +1055,36 @@
       state.myName = name;
       state.isHost = true;
       state.mode = 'multi';
+      state.gameStarted = false;
       state.roomCode = genCode();
       state.mpUseAccomp = document.getElementById('mp-opt-accomp').classList.contains('selected');
       state.mpUseScape = document.getElementById('mp-opt-scape').classList.contains('selected');
+      state.useScapegoat = state.mpUseScape;
+      state.useAccomplice = state.mpUseAccomp;
 
       const s = document.getElementById('create-status');
       s.textContent = '連線 PeerJS 伺服器中...';
+      s.className = 'conn-status';
+      document.getElementById('btn-create-room').disabled = true;
 
-      state.peer = new Peer(peerIdFromCode(state.roomCode), {
-        config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
-      });
+      try { if (state.peer) state.peer.destroy(); } catch (e) {}
+
+      const ice = {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      };
+
+      state.peer = new Peer(peerIdFromCode(state.roomCode), { debug: 1, config: ice });
 
       state.peer.on('open', (id) => {
         state.myPeerId = id;
         state.myPlayerId = 'host';
         state.lobbyPlayers = [{ id: 'host', name, isHost: true, peerId: id }];
+        document.getElementById('btn-create-room').disabled = false;
+        s.textContent = '房間已建立';
+        s.className = 'conn-status ok';
         showLobbyUI();
       });
 
@@ -1077,42 +1092,75 @@
         conn.on('data', (d) => handleHostReceive(conn, d));
         conn.on('close', () => {
           delete state.connections[conn.peer];
-          state.lobbyPlayers = state.lobbyPlayers.filter(p => p.peerId !== conn.peer);
-          broadcastLobby();
+          if (!state.gameStarted) {
+            state.lobbyPlayers = state.lobbyPlayers.filter(p => p.peerId !== conn.peer);
+            broadcastLobby();
+          }
         });
+        conn.on('error', () => {});
       });
 
-      state.peer.on('error', () => {
-        state.roomCode = genCode();
-        createRoom();
+      state.peer.on('error', (err) => {
+        console.warn('Peer error', err);
+        document.getElementById('btn-create-room').disabled = false;
+        const t = err && err.type;
+        if (t === 'unavailable-id') {
+          s.textContent = '房號被佔用，正在重試…';
+          try { state.peer.destroy(); } catch (e) {}
+          state.peer = null;
+          setTimeout(() => createRoom(), 400);
+        } else {
+          s.textContent = '連線失敗，請再按一次「建立房間」';
+          s.className = 'conn-status err';
+        }
       });
     }
 
     function handleHostReceive(conn, d) {
+      if (!d || !d.type) return;
       if (d.type === 'hello') {
         if (state.gameStarted || state.lobbyPlayers.length >= 8) {
           sendTo(conn, { type: 'err', msg: '房間已滿或遊戲已開始' });
-          conn.close();
+          try { conn.close(); } catch (e) {}
           return;
         }
+        state.lobbyPlayers = state.lobbyPlayers.filter(p => p.peerId !== conn.peer);
         const pid = 'p_' + Math.random().toString(36).slice(2, 6);
         state.connections[conn.peer] = conn;
-        state.lobbyPlayers.push({ id: pid, name: d.name, isHost: false, peerId: conn.peer });
-        sendTo(conn, { type: 'welcome', playerId: pid, code: state.roomCode });
+        state.lobbyPlayers.push({ id: pid, name: (d.name || '玩家').slice(0, 10), isHost: false, peerId: conn.peer });
+        sendTo(conn, {
+          type: 'welcome',
+          playerId: pid,
+          code: state.roomCode,
+          players: state.lobbyPlayers
+        });
         broadcastLobby();
       } else if (d.type === 'vote') {
+        if (!state.mpVotes) state.mpVotes = {};
+        if (state.mpVotes[d.playerId]) return;
         state.mpVotes[d.playerId] = d.targetId;
         const target = state.players.find(p => p.id === d.targetId);
-        if (target) target.votes++;
-        if (Object.keys(state.mpVotes).length >= state.players.length) {
-          calcResult();
-          broadcast({
-            type: 'result',
-            players: state.players,
-            nightLog: state.nightLog
-          });
-        }
+        if (target) target.votes = (target.votes || 0) + 1;
+        finishMpVoteIfReady();
       }
+    }
+
+    function finishMpVoteIfReady() {
+      if (!state.mpVotes) return;
+      const n = Object.keys(state.mpVotes).length;
+      if (n < state.players.length) {
+        const st = document.getElementById('mp-wait-desc') || document.getElementById('lobby-status');
+        if (st) st.textContent = '投票中 ' + n + '/' + state.players.length;
+        return;
+      }
+      state.useScapegoat = state.mpUseScape;
+      broadcast({
+        type: 'result',
+        players: state.players,
+        nightLog: state.nightLog || [],
+        useScapegoat: state.mpUseScape
+      });
+      calcResult();
     }
 
     function broadcastLobby() {
@@ -1120,36 +1168,96 @@
       renderLobbyList();
     }
 
+    function updateStartButton() {
+      const btn = document.getElementById('btn-start-mp');
+      const status = document.getElementById('lobby-status');
+      if (!btn) return;
+      if (state.isHost && !state.gameStarted) {
+        btn.classList.remove('hidden');
+        const n = state.lobbyPlayers.length;
+        const ok = n >= 4;
+        btn.disabled = !ok;
+        btn.textContent = ok ? ('開始遊戲（' + n + ' 人）') : ('開始遊戲（還差 ' + (4 - n) + ' 人）');
+        if (status) {
+          status.textContent = ok ? '人已到齊，可以開始！' : ('目前 ' + n + ' 人，至少 4 人才能開始');
+          status.className = 'conn-status' + (ok ? ' ok' : '');
+        }
+      } else {
+        btn.classList.add('hidden');
+        if (status && !state.isHost) {
+          status.textContent = '等待房主開始遊戲…';
+          status.className = 'conn-status';
+        }
+      }
+    }
+
     function renderLobbyList() {
       const list = document.getElementById('lobby-players');
+      if (!list) return;
       list.innerHTML = '';
       state.lobbyPlayers.forEach(p => {
         const div = document.createElement('div');
         div.className = 'lobby-player' + (p.isHost ? ' host' : '') + (p.id === state.myPlayerId ? ' me' : '');
-        div.innerHTML = `<span class="dot"></span><span>${p.name}${p.isHost ? '（房主）' : ''}</span>`;
+        div.innerHTML = '<span class="dot"></span><span>' + p.name + (p.isHost ? '（房主）' : '') + (p.id === state.myPlayerId ? ' · 你' : '') + '</span>';
         list.appendChild(div);
       });
-      document.getElementById('lobby-count').textContent = `${state.lobbyPlayers.length} / 8`;
-      const btn = document.getElementById('btn-start-mp');
-      if (state.isHost) {
-        btn.classList.remove('hidden');
-        btn.disabled = state.lobbyPlayers.length < 4;
-        btn.textContent = state.lobbyPlayers.length >= 4 ? '開始遊戲' : `還缺 ${4 - state.lobbyPlayers.length} 人`;
-      }
+      const countEl = document.getElementById('lobby-count');
+      if (countEl) countEl.textContent = state.lobbyPlayers.length + ' / 8';
+      updateStartButton();
     }
 
     function showLobbyUI() {
       showScreen('lobby');
       document.getElementById('lobby-code').textContent = state.roomCode;
+      const roleLabel = document.getElementById('lobby-role-label');
+      if (roleLabel) roleLabel.textContent = state.isHost ? '房主' : '已加入';
       renderLobbyList();
+
       const canvas = document.getElementById('qr-canvas');
-      const url = `${location.origin}${location.pathname}?room=${state.roomCode}`;
-      if (typeof QRCode !== 'undefined') {
-        QRCode.toCanvas(canvas, url, { width: 170, margin: 1 });
+      const hint = document.getElementById('qr-hint');
+      let url = state.roomCode;
+      try {
+        if (location.protocol.indexOf('http') === 0) {
+          const u = new URL(location.href);
+          u.searchParams.set('room', state.roomCode);
+          url = u.toString();
+        }
+      } catch (e) {}
+
+      const drawFallback = (msg) => {
+        try {
+          const ctx = canvas.getContext('2d');
+          const w = canvas.width, h = canvas.height;
+          ctx.fillStyle = '#2c1810';
+          ctx.fillRect(0, 0, w, h);
+          ctx.fillStyle = '#ffd166';
+          ctx.font = 'bold 26px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(state.roomCode, w / 2, h / 2 - 10);
+          ctx.fillStyle = '#b8a99a';
+          ctx.font = '12px sans-serif';
+          ctx.fillText('請輸入房號加入', w / 2, h / 2 + 20);
+        } catch (e) {}
+        if (hint) hint.textContent = msg || '請讓朋友手動輸入上方房號';
+      };
+
+      if (typeof QRCode === 'undefined') {
+        drawFallback('QR 無法載入，請用房號加入');
+      } else {
+        try {
+          QRCode.toCanvas(canvas, url, { width: 170, margin: 2, color: { dark: '#1a120b', light: '#ffffff' } }, function(err) {
+            if (err) drawFallback('QR 失敗，請用房號加入');
+            else if (hint) hint.textContent = '掃 QR 或輸入房號：' + state.roomCode;
+          });
+        } catch (e) {
+          drawFallback('QR 失敗，請用房號加入');
+        }
       }
     }
 
     function goJoinRoom() {
+      document.getElementById('join-status').textContent = '';
       document.getElementById('join-name').value = localStorage.getItem('ct_name') || '玩家';
       showScreen('join');
     }
@@ -1158,38 +1266,72 @@
       const name = (document.getElementById('join-name').value.trim() || '玩家').slice(0, 8);
       const code = document.getElementById('join-code').value.trim().toUpperCase();
       localStorage.setItem('ct_name', name);
+      if (!code || code.length < 4) {
+        document.getElementById('join-status').textContent = '請輸入 4 碼房號';
+        document.getElementById('join-status').className = 'conn-status err';
+        return;
+      }
       state.myName = name;
       state.isHost = false;
       state.mode = 'multi';
       state.roomCode = code;
+      state.gameStarted = false;
 
       const s = document.getElementById('join-status');
       s.textContent = '連線房間中...';
+      s.className = 'conn-status';
+      document.getElementById('btn-join-room').disabled = true;
 
-      state.peer = new Peer({
-        config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
-      });
+      try { if (state.peer) state.peer.destroy(); } catch (e) {}
+
+      const ice = {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      };
+
+      state.peer = new Peer({ debug: 1, config: ice });
       state.peer.on('open', () => {
-        const conn = state.peer.connect(peerIdFromCode(code));
+        const conn = state.peer.connect(peerIdFromCode(code), { reliable: true });
         state.hostConn = conn;
         conn.on('open', () => {
           sendTo(conn, { type: 'hello', name });
         });
         conn.on('data', handleClientReceive);
+        conn.on('close', () => {
+          s.textContent = '與房主斷線';
+          s.className = 'conn-status err';
+        });
+        conn.on('error', () => {
+          s.textContent = '連線失敗，請確認房號';
+          s.className = 'conn-status err';
+          document.getElementById('btn-join-room').disabled = false;
+        });
       });
       state.peer.on('error', () => {
-        s.textContent = '找不到該房號，請確認後重試。';
+        s.textContent = '找不到該房號，請確認後重試';
+        s.className = 'conn-status err';
+        document.getElementById('btn-join-room').disabled = false;
       });
     }
 
     function handleClientReceive(d) {
+      if (!d || !d.type) return;
       if (d.type === 'welcome') {
         state.myPlayerId = d.playerId;
-        showScreen('lobby');
-        document.getElementById('lobby-code').textContent = state.roomCode;
+        if (d.players) state.lobbyPlayers = d.players;
+        document.getElementById('btn-join-room').disabled = false;
+        document.getElementById('join-status').textContent = '已加入！';
+        document.getElementById('join-status').className = 'conn-status ok';
+        showLobbyUI();
       } else if (d.type === 'lobby') {
         state.lobbyPlayers = d.players;
         renderLobbyList();
+      } else if (d.type === 'err') {
+        document.getElementById('join-status').textContent = d.msg || '無法加入';
+        document.getElementById('join-status').className = 'conn-status err';
+        document.getElementById('btn-join-room').disabled = false;
       } else if (d.type === 'game_start') {
         showScreen('role');
         state.myRole = d.role;
@@ -1248,7 +1390,10 @@
     }
 
     function hostStartGame() {
+      if (!state.isHost || state.lobbyPlayers.length < 4) return;
       state.gameStarted = true;
+      state.nightLog = [];
+      state.mpVotes = {};
       const n = state.lobbyPlayers.length;
       let roles = [ROLE.THIEF];
       const sleepy = n - 1 - (state.mpUseScape && n >= 6 ? 1 : 0);
@@ -1319,14 +1464,51 @@
           showScreen('day');
           state.daySeconds = 300;
           updateDayTimerDisplay();
-          document.getElementById('btn-go-vote').onclick = () => {
-            state.mpVotes = {};
-            broadcast({ type: 'vote_start', players: state.players });
-            document.getElementById('btn-go-vote').onclick = goToVote;
-          };
+          document.getElementById('btn-go-vote').classList.remove('hidden');
+          document.getElementById('btn-go-vote').textContent = '進入投票';
+          document.getElementById('btn-go-vote').onclick = hostStartMpVote;
         }
       };
       step();
+    }
+
+    function hostStartMpVote() {
+      state.mpVotes = {};
+      state.players.forEach(p => { p.votes = 0; });
+      const publicPlayers = state.players.map(p => ({ id: p.id, name: p.name }));
+      broadcast({ type: 'vote_start', players: publicPlayers });
+      // 房主自己也要投票
+      showScreen('vote');
+      document.getElementById('vote-current-player').textContent = '請投票（' + state.myName + '）';
+      const vl = document.getElementById('vote-list');
+      vl.innerHTML = '';
+      state.selectedVote = null;
+      publicPlayers.forEach(p => {
+        const div = document.createElement('div');
+        div.className = 'vote-item';
+        div.innerHTML = '<span>' + p.name + (p.id === state.myPlayerId ? '（自己）' : '') + '</span>';
+        div.onclick = () => {
+          document.querySelectorAll('.vote-item').forEach(e => e.classList.remove('selected'));
+          div.classList.add('selected');
+          state.selectedVote = p.id;
+          document.getElementById('btn-cast-vote').disabled = false;
+        };
+        vl.appendChild(div);
+      });
+      document.getElementById('btn-cast-vote').disabled = true;
+      document.getElementById('btn-cast-vote').textContent = '確認投票';
+      document.getElementById('btn-cast-vote').onclick = () => {
+        if (!state.selectedVote) return;
+        document.getElementById('btn-cast-vote').disabled = true;
+        if (!state.mpVotes) state.mpVotes = {};
+        state.mpVotes[state.myPlayerId] = state.selectedVote;
+        const target = state.players.find(p => p.id === state.selectedVote);
+        if (target) target.votes = (target.votes || 0) + 1;
+        showScreen('mp-wait');
+        document.getElementById('mp-wait-title').textContent = '已投票';
+        document.getElementById('mp-wait-desc').textContent = '等待其他人…';
+        finishMpVoteIfReady();
+      };
     }
 
     function leaveRoom() {
