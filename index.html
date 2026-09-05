@@ -761,52 +761,64 @@
       }
       document.getElementById('night-clock').textContent = state.nightHour;
       document.getElementById('night-phase-badge').textContent = state.nightHour + ' 點';
-      document.getElementById('night-instruction').innerHTML = `第 <strong>${state.nightHour} 小時</strong>醒來。`;
+      document.getElementById('night-instruction').innerHTML =
+        `第 <strong>${state.nightHour} 小時</strong><br>骰到此點的玩家請睜眼行動`;
       speak(`第 ${state.nightHour} 小時醒來。`);
       document.getElementById('btn-night-continue').classList.add('hidden');
 
       const awake = state.players.filter(p => p.die === state.nightHour);
-      if (awake.length === 0) {
-        setTimeout(() => {
+      // 給大家時間「睜眼／假裝」，約 3 秒後處理行動
+      setTimeout(() => {
+        if (awake.length === 0) {
           speak(`第 ${state.nightHour} 小時請閉眼。`);
-          state.nightHour++;
-          setTimeout(runNightHourLocal, 1500);
-        }, 3500);
-      } else {
-        document.getElementById('btn-night-continue').classList.remove('hidden');
-        document.getElementById('btn-night-continue').textContent = '此小時醒來的人執行動作';
-        document.getElementById('btn-night-continue').onclick = () => {
-          let i = 0;
-          function loop() {
-            if (i >= awake.length) {
-              speak(`第 ${state.nightHour} 小時請閉眼。`);
+          document.getElementById('night-instruction').innerHTML =
+            `第 <strong>${state.nightHour} 小時</strong><br>沒有人醒來，請繼續閉眼`;
+          setTimeout(() => {
+            state.nightHour++;
+            runNightHourLocal();
+          }, 2000);
+          return;
+        }
+        // 有人醒來：依序傳手機做私人行動
+        document.getElementById('night-instruction').innerHTML =
+          `第 <strong>${state.nightHour} 小時</strong><br>醒來的人請依序傳手機行動`;
+        let i = 0;
+        function loop() {
+          if (i >= awake.length) {
+            speak(`第 ${state.nightHour} 小時請閉眼。`);
+            document.getElementById('night-instruction').innerHTML =
+              `第 <strong>${state.nightHour} 小時</strong>結束<br>所有人請閉眼`;
+            setTimeout(() => {
               state.nightHour++;
-              setTimeout(runNightHourLocal, 1000);
-              return;
-            }
-            showPassCover(awake[i].name, () => {
-              showPrivateAction(awake[i], awake.length === 1, () => { i++; loop(); });
-            });
+              runNightHourLocal();
+            }, 2000);
+            return;
           }
-          loop();
-        };
-      }
+          showPassCover(awake[i].name, () => {
+            showPrivateAction(awake[i], awake.length === 1, awake, () => { i++; loop(); });
+          });
+        }
+        loop();
+      }, 3200);
     }
 
-    function showPrivateAction(actor, isAlone, done) {
+    function showPrivateAction(actor, isAlone, awake, done) {
+      if (typeof awake === 'function') { done = awake; awake = []; }
       const pv = document.getElementById('private-view');
       const content = document.getElementById('private-content');
       pv.classList.remove('hidden');
+      const awakeNames = (awake || []).map(a => a.name).join('、');
 
       if (actor.role === ROLE.THIEF) {
         content.innerHTML = `
           <div style="font-size:3.5rem;">🕵️🧀</div>
           <h2 style="color:var(--accent2);">${actor.name}</h2>
-          <p style="margin:0.8rem 0;">你是奶酪大盜！請在桌上拿走芝士。</p>
-          <button class="btn btn-danger" id="act-steal">已拿走芝士</button>
+          <p style="margin:0.8rem 0;line-height:1.5;">你是<strong>奶酪大盜</strong>！<br>無論有沒有人同時醒來，都要偷走起司。</p>
+          ${awakeNames ? '<p style="color:var(--muted);font-size:0.88rem;">同時醒來：' + awakeNames + '</p>' : ''}
+          <button class="btn btn-danger" id="act-steal">偷走起司 🧀</button>
         `;
         document.getElementById('act-steal').onclick = () => {
-          state.nightLog.push(`${actor.name}（大盜）拿走了起司`);
+          state.nightLog.push(actor.name + '（大盜）拿走了起司');
           pv.classList.add('hidden');
           done();
         };
@@ -815,8 +827,9 @@
         content.innerHTML = `
           <div style="font-size:3rem;">🐭👀</div>
           <h2>${actor.name}</h2>
-          <p style="margin:0.8rem 0;">你是唯一醒來的老鼠，可偷看一名玩家的點數：</p>
+          <p style="margin:0.8rem 0;line-height:1.5;">你是<strong>唯一醒來</strong>的人，可偷看一人骰子。</p>
           <div class="peek-list" id="peek-list"></div>
+          <button class="btn btn-secondary" style="margin-top:0.6rem;" id="btn-skip-peek">不偷看，跳過</button>
         `;
         const pl = document.getElementById('peek-list');
         others.forEach(o => {
@@ -827,9 +840,10 @@
               <div style="font-size:2.5rem;">🎲</div>
               <h2>${o.name}</h2>
               <div style="font-size:3rem;font-weight:900;color:var(--cheese);margin:1rem 0;">${o.die} 點</div>
+              <p style="color:var(--muted);">請記住，不要告訴別人你看了誰</p>
               <button class="btn btn-primary" id="btn-peek-ok">記住了</button>
             `;
-            state.nightLog.push(`${actor.name} 偷看了 ${o.name}（${o.die}點）`);
+            state.nightLog.push(actor.name + ' 偷看了 ' + o.name);
             document.getElementById('btn-peek-ok').onclick = () => {
               pv.classList.add('hidden');
               done();
@@ -837,14 +851,20 @@
           };
           pl.appendChild(b);
         });
+        document.getElementById('btn-skip-peek').onclick = () => {
+          pv.classList.add('hidden');
+          done();
+        };
       } else {
         content.innerHTML = `
-          <div style="font-size:3rem;">🐭👀</div>
+          <div style="font-size:3rem;">🐭</div>
           <h2>${actor.name}</h2>
-          <p style="margin:0.8rem 0;">本小時有其他老鼠同時睜眼，只能彼此對視，不可偷看骰子！</p>
-          <button class="btn btn-primary" id="act-seen">確認</button>
+          <p style="margin:0.8rem 0;line-height:1.5;">有人同時醒來，<strong>不能偷看骰子</strong>，只能對視。</p>
+          <p style="color:var(--muted);font-size:0.9rem;">同時醒來：${awakeNames}</p>
+          <button class="btn btn-primary" id="act-seen">知道了，閉眼</button>
         `;
         document.getElementById('act-seen').onclick = () => {
+          state.nightLog.push(actor.name + ' 與他人同時醒來');
           pv.classList.add('hidden');
           done();
         };
@@ -1142,6 +1162,16 @@
         const target = state.players.find(p => p.id === d.targetId);
         if (target) target.votes = (target.votes || 0) + 1;
         finishMpVoteIfReady();
+      } else if (d.type === 'night_ack') {
+        // 找到是哪個玩家的連線
+        const pl = state.players.find(p => p.peerId === conn.peer);
+        if (d.action === 'steal') state.nightLog.push('大盜偷走了起司');
+        if (d.action === 'peek') state.nightLog.push('有人偷看了 ' + (d.extra || ''));
+        if (pl && state._nightPending && state._nightPending[pl.id]) {
+          const cb = state._nightPending[pl.id];
+          delete state._nightPending[pl.id];
+          cb();
+        }
       }
     }
 
@@ -1351,11 +1381,15 @@
         };
       } else if (d.type === 'night_tick') {
         showScreen('night');
-        document.getElementById('night-clock').textContent = d.hour === 0 ? '🌙' : d.hour;
-        document.getElementById('night-instruction').textContent = d.msg;
+        document.getElementById('private-view').classList.add('hidden');
+        document.getElementById('night-clock').textContent = d.hour === 0 ? '🌙' : (d.hour > 6 ? '☀️' : d.hour);
+        document.getElementById('night-instruction').innerHTML = d.msg;
+        document.getElementById('btn-night-continue').classList.add('hidden');
         if (d.hour === state.myDie) {
-          navigator.vibrate && navigator.vibrate(200);
+          try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch (e) {}
         }
+      } else if (d.type === 'night_private') {
+        showMpNightPrivate(d);
       } else if (d.type === 'day') {
         showScreen('day');
         state.daySeconds = 300;
@@ -1440,36 +1474,147 @@
     }
 
     function hostRunNightSequence() {
-      let h = 0;
+      state.nightHour = 0;
+      state.nightLog = state.nightLog || [];
       showScreen('night');
-      const step = () => {
-        if (h === 0) {
-          broadcast({ type: 'night_tick', hour: 0, msg: '天黑請閉眼...' });
-          document.getElementById('night-clock').textContent = '🌙';
-          speak('天黑請閉眼。');
-          h++;
-          setTimeout(step, 4000);
-        } else if (h <= 6) {
-          broadcast({ type: 'night_tick', hour: h, msg: `第 ${h} 小時醒來` });
-          document.getElementById('night-clock').textContent = h;
-          speak(`第 ${h} 小時醒來。`);
+      document.getElementById('btn-night-continue').classList.add('hidden');
+
+      const announce = (hour, msg) => {
+        broadcast({ type: 'night_tick', hour: hour, msg: msg });
+        document.getElementById('night-clock').textContent = hour === 0 ? '🌙' : (hour > 6 ? '☀️' : hour);
+        document.getElementById('night-phase-badge').textContent = hour === 0 ? '天黑' : (hour > 6 ? '天亮' : (hour + ' 點'));
+        document.getElementById('night-instruction').innerHTML = msg;
+        speak(msg.replace(/<[^>]+>/g, ''));
+      };
+
+      const runHour = (h) => {
+        if (h > 6) {
+          // 共犯階段（可選，簡化：多人由大盜在白天自行假裝；此處跳過數位指定以保節奏）
+          announce(7, '天亮了！所有人請睜眼。<br>起司被偷了，開始討論。');
           setTimeout(() => {
-            speak(`第 ${h} 小時閉眼。`);
-            h++;
-            setTimeout(step, 1500);
-          }, 4500);
+            broadcast({ type: 'day' });
+            showScreen('day');
+            state.daySeconds = 300;
+            updateDayTimerDisplay();
+            document.getElementById('btn-go-vote').classList.remove('hidden');
+            document.getElementById('btn-go-vote').textContent = '進入投票';
+            document.getElementById('btn-go-vote').onclick = hostStartMpVote;
+          }, 3500);
+          return;
+        }
+
+        const msg = '第 ' + h + ' 小時：骰到 ' + h + ' 的玩家請睜眼行動';
+        announce(h, msg);
+
+        const awake = state.players.filter(p => p.die === h);
+        // 給 2.5 秒讓大家反應睜眼
+        setTimeout(() => {
+          if (awake.length === 0) {
+            announce(h, '第 ' + h + ' 小時沒有人醒來，請繼續閉眼');
+            setTimeout(() => runHour(h + 1), 2500);
+            return;
+          }
+
+          // 對每個醒來的人發送私人行動
+          let pending = awake.length;
+          const onDoneOne = () => {
+            pending--;
+            if (pending <= 0) {
+              announce(h, '第 ' + h + ' 小時結束，所有人請閉眼');
+              setTimeout(() => runHour(h + 1), 2500);
+            }
+          };
+
+          awake.forEach(p => {
+            const isAlone = awake.length === 1;
+            const payload = {
+              type: 'night_private',
+              hour: h,
+              role: p.role,
+              isAlone: isAlone,
+              awakeNames: awake.map(a => a.name),
+              peekOptions: (isAlone && p.role !== 'thief')
+                ? state.players.filter(x => x.id !== p.id).map(x => ({ id: x.id, name: x.name, die: x.die }))
+                : []
+            };
+            if (p.isHost) {
+              showMpNightPrivate(payload, onDoneOne);
+            } else {
+              // 客戶端完成後會回 night_ack
+              state._nightPending = state._nightPending || {};
+              state._nightPending[p.id] = onDoneOne;
+              sendTo(state.connections[p.peerId], payload);
+              // 超時保護：15 秒沒回應就繼續
+              setTimeout(() => {
+                if (state._nightPending && state._nightPending[p.id]) {
+                  const cb = state._nightPending[p.id];
+                  delete state._nightPending[p.id];
+                  cb();
+                }
+              }, 15000);
+            }
+          });
+        }, 2800);
+      };
+
+      // 先天黑
+      announce(0, '天黑了，所有人請閉眼…');
+      setTimeout(() => runHour(1), 4000);
+    }
+
+    function showMpNightPrivate(data, done) {
+      const pv = document.getElementById('private-view');
+      const content = document.getElementById('private-content');
+      pv.classList.remove('hidden');
+      const finish = (action, extra) => {
+        pv.classList.add('hidden');
+        if (state.isHost) {
+          if (action === 'steal') state.nightLog.push('大盜偷走了起司');
+          if (action === 'peek') state.nightLog.push('有人偷看了 ' + (extra || ''));
+          if (typeof done === 'function') done();
         } else {
-          broadcast({ type: 'day' });
-          speak('天亮了，全員請睜眼！');
-          showScreen('day');
-          state.daySeconds = 300;
-          updateDayTimerDisplay();
-          document.getElementById('btn-go-vote').classList.remove('hidden');
-          document.getElementById('btn-go-vote').textContent = '進入投票';
-          document.getElementById('btn-go-vote').onclick = hostStartMpVote;
+          sendTo(state.hostConn, { type: 'night_ack', action: action, extra: extra || '' });
         }
       };
-      step();
+
+      if (data.role === 'thief' || data.role === ROLE.THIEF) {
+        content.innerHTML = `
+          <div style="font-size:3rem;">🕵️🧀</div>
+          <h2 style="color:var(--accent2);">奶酪大盜</h2>
+          <p style="margin:0.9rem 0;line-height:1.5;">請偷走起司！<br>（有人同時醒也要偷）</p>
+          <button class="btn btn-danger" id="mp-steal">偷走起司 🧀</button>`;
+        document.getElementById('mp-steal').onclick = () => finish('steal');
+      } else if (data.isAlone && data.peekOptions && data.peekOptions.length) {
+        content.innerHTML = `
+          <div style="font-size:3rem;">🐭👀</div>
+          <h2>唯一醒來</h2>
+          <p style="margin:0.9rem 0;">可偷看一人骰子</p>
+          <div class="peek-list" id="mp-peek"></div>
+          <button class="btn btn-secondary" style="margin-top:0.6rem;" id="mp-skip">跳過</button>`;
+        const list = document.getElementById('mp-peek');
+        data.peekOptions.forEach(o => {
+          const b = document.createElement('button');
+          b.textContent = o.name;
+          b.onclick = () => {
+            content.innerHTML = `
+              <div style="font-size:2.4rem;">🎲</div>
+              <h2>${o.name}</h2>
+              <div style="font-size:2.8rem;font-weight:900;color:var(--cheese);margin:1rem 0;">${o.die} 點</div>
+              <button class="btn btn-primary" id="mp-peek-ok">記住了</button>`;
+            document.getElementById('mp-peek-ok').onclick = () => finish('peek', o.name);
+          };
+          list.appendChild(b);
+        });
+        document.getElementById('mp-skip').onclick = () => finish('skip');
+      } else {
+        content.innerHTML = `
+          <div style="font-size:3rem;">🐭</div>
+          <h2>你醒來了</h2>
+          <p style="margin:0.9rem 0;line-height:1.5;">有人同時醒來，不能偷看。<br>記住你看到誰。</p>
+          <p style="color:var(--muted);font-size:0.88rem;">${(data.awakeNames || []).join('、')}</p>
+          <button class="btn btn-primary" id="mp-seen">知道了</button>`;
+        document.getElementById('mp-seen').onclick = () => finish('seen');
+      }
     }
 
     function hostStartMpVote() {
