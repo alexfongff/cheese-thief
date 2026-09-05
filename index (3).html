@@ -1,0 +1,1531 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#1a120b" />
+  <title>奶酪大盜 · Cheese Thief</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <style>
+    :root {
+      --bg: #1a120b;
+      --card: #2c1810;
+      --accent: #f4a261;
+      --accent2: #e76f51;
+      --cheese: #ffd166;
+      --text: #fefae0;
+      --muted: #b8a99a;
+      --success: #2a9d8f;
+      --danger: #e63946;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      height: 100%;
+      font-family: 'Noto Sans TC', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+      user-select: none;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100dvh;
+      background:
+        radial-gradient(ellipse at 20% 0%, #3d2a1f 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 100%, #2c1810 0%, transparent 40%),
+        var(--bg);
+    }
+    .screen {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      padding: 1.25rem;
+      padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+      max-width: 480px;
+      margin: 0 auto;
+      width: 100%;
+      animation: fadeIn 0.25s ease;
+    }
+    .screen.active { display: flex; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    h1 {
+      font-size: 1.85rem;
+      font-weight: 900;
+      text-align: center;
+      color: var(--cheese);
+      margin-bottom: 0.25rem;
+    }
+    h2 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 0.75rem;
+      color: var(--accent);
+    }
+    .subtitle {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-bottom: 1.25rem;
+      line-height: 1.5;
+    }
+    .card {
+      background: var(--card);
+      border-radius: 1rem;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+      border: 1px solid rgba(244, 162, 97, 0.15);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 0.95rem 1.25rem;
+      border: none;
+      border-radius: 0.85rem;
+      font-family: inherit;
+      font-size: 1.05rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.1s, opacity 0.15s;
+      text-align: center;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #1a120b; }
+    .btn-secondary { background: rgba(244, 162, 97, 0.15); color: var(--accent); border: 1px solid rgba(244, 162, 97, 0.35); }
+    .btn-danger { background: linear-gradient(135deg, #e63946, #c1121f); color: white; }
+    .btn-success { background: linear-gradient(135deg, var(--success), #1d7a6f); color: white; }
+    .btn:disabled { opacity: 0.4; pointer-events: none; }
+    .btn-row { display: flex; gap: 0.75rem; margin-top: 0.75rem; }
+    .btn-row .btn { flex: 1; }
+    .player-count { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.5rem; margin: 1rem 0; }
+    .player-count button {
+      aspect-ratio: 1;
+      border-radius: 0.75rem;
+      border: 2px solid rgba(244, 162, 97, 0.3);
+      background: transparent;
+      color: var(--text);
+      font-size: 1.25rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .player-count button.selected { background: var(--accent); color: #1a120b; border-color: var(--accent); }
+    .name-list { display: flex; flex-direction: column; gap: 0.55rem; margin: 0.75rem 0; max-height: 40vh; overflow-y: auto; }
+    .name-item { display: flex; align-items: center; gap: 0.55rem; }
+    .name-item .num {
+      width: 1.7rem; height: 1.7rem; border-radius: 50%;
+      background: var(--accent); color: #1a120b;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 0.85rem; flex-shrink: 0;
+    }
+    .name-item input {
+      flex: 1; padding: 0.65rem 0.85rem; border-radius: 0.6rem;
+      border: 1px solid rgba(244, 162, 97, 0.25); background: rgba(0,0,0,0.25);
+      color: var(--text); font-size: 1rem; outline: none;
+    }
+    .role-card {
+      text-align: center; padding: 1.75rem 1rem; border-radius: 1.25rem;
+      background: linear-gradient(160deg, #3d2a1f, #2c1810);
+      border: 2px solid var(--accent); margin: 1.25rem 0;
+      min-height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .role-card.thief { border-color: var(--accent2); box-shadow: 0 0 28px rgba(231, 111, 81, 0.3); }
+    .role-card.scapegoat { border-color: #9b5de5; box-shadow: 0 0 28px rgba(155, 93, 229, 0.3); }
+    .role-icon { font-size: 3.5rem; margin-bottom: 0.5rem; }
+    .role-name { font-size: 1.5rem; font-weight: 900; margin-bottom: 0.3rem; }
+    .role-desc { color: var(--muted); font-size: 0.92rem; line-height: 1.5; max-width: 260px; }
+    .dice {
+      width: 88px; height: 88px;
+      background: linear-gradient(145deg, #f4a261, #e76f51);
+      border-radius: 1rem; display: inline-flex; align-items: center; justify-content: center;
+      font-size: 2.6rem; font-weight: 900; color: #1a120b;
+      box-shadow: 0 8px 18px rgba(231, 111, 81, 0.35); margin-bottom: 0.75rem;
+    }
+    .night-bg { background: radial-gradient(ellipse at center, #1a2744 0%, #0d1321 80%); }
+    .clock {
+      font-size: 4.5rem; font-weight: 900; text-align: center;
+      color: var(--cheese); text-shadow: 0 0 36px rgba(255, 209, 102, 0.4); margin: 0.75rem 0;
+    }
+    .night-instruction {
+      text-align: center; font-size: 1.15rem; line-height: 1.55;
+      margin: 0.75rem 0; padding: 1rem; background: rgba(0,0,0,0.35); border-radius: 0.85rem;
+    }
+    .private-view, .pass-cover {
+      background: rgba(10, 7, 5, 0.96); position: fixed; inset: 0;
+      z-index: 100; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; padding: 1.5rem; text-align: center;
+    }
+    .pass-cover { z-index: 200; }
+    .pass-cover .pass-name { font-size: 2rem; font-weight: 900; color: var(--accent); margin: 0.6rem 0 1.25rem; }
+    .hold-btn {
+      position: relative; width: 160px; height: 160px; border-radius: 50%;
+      border: 4px solid rgba(244, 162, 97, 0.35); background: rgba(244, 162, 97, 0.08);
+      color: var(--text); font-size: 1rem; font-weight: 700; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; flex-direction: column;
+      overflow: hidden; touch-action: none;
+    }
+    .hold-btn .hold-progress {
+      position: absolute; inset: 0;
+      background: conic-gradient(var(--accent) var(--progress, 0%), transparent 0%);
+      opacity: 0.35;
+    }
+    .hold-btn .hold-inner { position: relative; z-index: 1; pointer-events: none; }
+    .peek-list { display: flex; flex-direction: column; gap: 0.5rem; width: 100%; max-width: 280px; margin-top: 0.75rem; }
+    .peek-list button {
+      padding: 0.8rem; border-radius: 0.65rem; border: 1px solid rgba(244, 162, 97, 0.4);
+      background: rgba(244, 162, 97, 0.1); color: var(--text); font-size: 1rem; font-weight: 600; cursor: pointer;
+    }
+    .vote-list { display: flex; flex-direction: column; gap: 0.5rem; margin: 0.75rem 0; max-height: 48vh; overflow-y: auto; }
+    .vote-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.85rem 1rem; background: rgba(0,0,0,0.25); border-radius: 0.7rem;
+      border: 1px solid transparent; cursor: pointer;
+    }
+    .vote-item.selected { border-color: var(--accent); background: rgba(244, 162, 97, 0.18); }
+    .vote-item .vote-count {
+      background: var(--accent); color: #1a120b; font-weight: 700;
+      min-width: 1.8rem; height: 1.8rem; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; font-size: 0.85rem;
+    }
+    .result-box { text-align: center; padding: 1.5rem; border-radius: 1rem; margin: 0.75rem 0; }
+    .result-box.win-good { background: rgba(42,157,143,0.2); border: 2px solid var(--success); }
+    .result-box.win-evil { background: rgba(230,57,70,0.2); border: 2px solid var(--danger); }
+    .result-box.win-scapegoat { background: rgba(155,93,229,0.2); border: 2px solid #9b5de5; }
+    .status-bar { display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.4rem; }
+    .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; background: rgba(244, 162, 97, 0.2); color: var(--accent); }
+    .options-row { display: flex; gap: 0.65rem; margin: 0.75rem 0; }
+    .option-chip {
+      flex: 1; padding: 0.7rem; border-radius: 0.7rem; border: 2px solid rgba(244, 162, 97, 0.3);
+      background: transparent; color: var(--text); font-size: 0.9rem; font-weight: 600; cursor: pointer; text-align: center;
+    }
+    .option-chip.selected { background: var(--accent); color: #1a120b; border-color: var(--accent); }
+    .room-code-big { font-size: 2.8rem; font-weight: 900; letter-spacing: 0.25em; text-align: center; color: var(--cheese); margin: 0.5rem 0; font-variant-numeric: tabular-nums; }
+    #qr-canvas { background: #fff; border-radius: 0.75rem; padding: 0.5rem; margin: 0.5rem auto; display: block; max-width: 170px; width: 100%; }
+    .player-lobby-list { display: flex; flex-direction: column; gap: 0.45rem; margin: 0.75rem 0; max-height: 28vh; overflow-y: auto; }
+    .lobby-player { display: flex; align-items: center; gap: 0.6rem; padding: 0.65rem 0.85rem; background: rgba(0,0,0,0.25); border-radius: 0.65rem; font-weight: 600; }
+    .lobby-player .dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--success); flex-shrink: 0; }
+    .lobby-player.host .dot { background: var(--accent); }
+    .lobby-player.me { border: 1px solid rgba(244,162,97,0.45); }
+    .conn-status { text-align: center; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.5rem; }
+    .conn-status.ok { color: var(--success); }
+    .conn-status.err { color: var(--danger); }
+    input.room-input {
+      width: 100%; padding: 0.9rem; border-radius: 0.75rem; border: 2px solid rgba(244, 162, 97, 0.35);
+      background: rgba(0,0,0,0.3); color: var(--text); font-size: 1.5rem; font-weight: 700; text-align: center; letter-spacing: 0.25em; outline: none; text-transform: uppercase;
+    }
+    input.name-input-mp {
+      width: 100%; padding: 0.85rem; border-radius: 0.7rem; border: 1px solid rgba(244, 162, 97, 0.3);
+      background: rgba(0,0,0,0.25); color: var(--text); font-size: 1.05rem; outline: none; margin-bottom: 0.75rem;
+    }
+    .waiting-pulse { animation: pulse 1.4s ease infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <div id="screen-home" class="screen active">
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;">
+      <div style="text-align:center;margin-bottom:1.75rem;">
+        <div style="font-size:4rem;margin-bottom:0.4rem;">🧀🐭</div>
+        <h1>奶酪大盜</h1>
+        <p class="subtitle">Cheese Thief · 手機版</p>
+      </div>
+      <div class="card">
+        <button class="btn btn-primary" onclick="showScreen('mode')">開始遊戲</button>
+        <button class="btn btn-secondary" style="margin-top:0.6rem;" onclick="showScreen('rules')">遊戲規則</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-mode" class="screen">
+    <h2>選擇遊玩模式</h2>
+    <div class="card">
+      <button class="btn btn-primary" onclick="goToSetupLocal()">📱 單機傳閱模式</button>
+      <p style="text-align:center;color:var(--muted);font-size:0.82rem;margin:0.4rem 0 1rem;">一台手機輪流傳看，現場派對首選</p>
+      <button class="btn btn-success" onclick="showScreen('multi-menu')">🌐 多人連線房間</button>
+      <p style="text-align:center;color:var(--muted);font-size:0.82rem;margin:0.4rem 0 0;">每人一台手機，掃 QR Code 即時連線</p>
+    </div>
+    <button class="btn btn-secondary" onclick="goHome()">返回</button>
+  </div>
+
+  <div id="screen-multi-menu" class="screen">
+    <h2>多人連線大廳</h2>
+    <div class="card">
+      <button class="btn btn-primary" onclick="goCreateRoom()">創建房間（房主）</button>
+      <button class="btn btn-secondary" style="margin-top:0.65rem;" onclick="goJoinRoom()">加入房間</button>
+    </div>
+    <button class="btn btn-secondary" onclick="showScreen('mode')">返回</button>
+  </div>
+
+  <div id="screen-create" class="screen">
+    <h2>創建房間</h2>
+    <div class="card">
+      <p style="text-align:center;color:var(--muted);font-size:0.9rem;margin-bottom:0.5rem;">你的暱稱</p>
+      <input class="name-input-mp" id="host-name" type="text" maxlength="10" placeholder="例如：安迪" value="房主">
+      <div class="options-row">
+        <button class="option-chip selected" id="mp-opt-accomp" onclick="toggleMpAccomp()">共犯機制 (5人+)</button>
+        <button class="option-chip" id="mp-opt-scape" onclick="toggleMpScape()">背鍋鼠 (6人+)</button>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="btn-create-room" onclick="createRoom()">建立房間</button>
+    <button class="btn btn-secondary" style="margin-top:0.55rem;" onclick="showScreen('multi-menu')">返回</button>
+    <p class="conn-status" id="create-status" style="margin-top:0.75rem;"></p>
+  </div>
+
+  <div id="screen-lobby" class="screen">
+    <div class="status-bar">
+      <span id="lobby-role-label">大廳</span>
+      <span class="badge" id="lobby-count">1 / 8</span>
+    </div>
+    <h2>等待玩家加入</h2>
+    <div class="card" style="text-align:center;">
+      <p style="color:var(--muted);font-size:0.85rem;">房間代碼</p>
+      <div class="room-code-big" id="lobby-code">----</div>
+      <canvas id="qr-canvas" width="170" height="170"></canvas>
+      <p style="color:var(--muted);font-size:0.8rem;margin-top:0.35rem;" id="qr-hint">掃描上方 QR 加入</p>
+    </div>
+    <div class="card">
+      <p style="font-weight:700;margin-bottom:0.4rem;">玩家列表</p>
+      <div class="player-lobby-list" id="lobby-players"></div>
+    </div>
+    <button class="btn btn-primary hidden" id="btn-start-mp" onclick="hostStartGame()">開始遊戲</button>
+    <button class="btn btn-secondary" style="margin-top:0.55rem;" onclick="leaveRoom()">離開房間</button>
+    <p class="conn-status" id="lobby-status" style="margin-top:0.5rem;"></p>
+  </div>
+
+  <div id="screen-join" class="screen">
+    <h2>加入房間</h2>
+    <div class="card">
+      <p style="text-align:center;color:var(--muted);font-size:0.9rem;margin-bottom:0.5rem;">你的暱稱</p>
+      <input class="name-input-mp" id="join-name" type="text" maxlength="10" placeholder="例如：小明" value="玩家">
+      <p style="text-align:center;color:var(--muted);font-size:0.9rem;margin:0.75rem 0 0.4rem;">房間代碼</p>
+      <input class="room-input" id="join-code" type="text" maxlength="4" placeholder="ABCD" autocomplete="off">
+    </div>
+    <button class="btn btn-primary" id="btn-join-room" onclick="joinRoom()">加入</button>
+    <button class="btn btn-secondary" style="margin-top:0.55rem;" onclick="showScreen('multi-menu')">返回</button>
+    <p class="conn-status" id="join-status" style="margin-top:0.75rem;"></p>
+  </div>
+
+  <div id="screen-rules" class="screen">
+    <h2>遊戲規則簡介</h2>
+    <div class="card" style="max-height:65vh;overflow-y:auto;font-size:0.9rem;line-height:1.6;">
+      <p><strong>陣營目標：</strong></p>
+      <ul style="padding-left:1.2rem;margin:0.4rem 0;">
+        <li><strong>貪睡鼠</strong>：抓出誰是奶酪大盜。</li>
+        <li><strong>奶酪大盜（+共犯）</strong>：夜晚偷起司，白天逃避投票。</li>
+        <li><strong>背鍋鼠</strong>：努力讓自己成為最高票獨贏。</li>
+      </ul>
+      <p><strong>夜晚行動：</strong></p>
+      <ul style="padding-left:1.2rem;margin:0.4rem 0;">
+        <li>夜晚由第 1 至 6 小時依次醒來。</li>
+        <li><strong>只有獨自醒來時</strong>，貪睡鼠才可以偷看其他任意一人骰子。</li>
+        <li>大盜醒來時必須偷走起司；若有人與大盜同時醒來，大盜身分極易曝光！</li>
+      </ul>
+    </div>
+    <button class="btn btn-primary" onclick="goHome()">返回</button>
+  </div>
+
+  <div id="screen-setup" class="screen">
+    <h2>單機設定</h2>
+    <div class="card">
+      <p style="text-align:center;margin-bottom:0.4rem;">玩家人數</p>
+      <div class="player-count" id="player-count-btns">
+        <button data-n="4">4</button>
+        <button data-n="5">5</button>
+        <button data-n="6" class="selected">6</button>
+        <button data-n="7">7</button>
+        <button data-n="8">8</button>
+      </div>
+      <div class="options-row">
+        <button class="option-chip" id="opt-scapegoat" onclick="toggleScapegoat()">背鍋鼠</button>
+        <button class="option-chip selected" id="opt-accomplice" onclick="toggleAccomplice()">共犯機制</button>
+      </div>
+      <div class="name-list" id="name-list"></div>
+    </div>
+    <button class="btn btn-primary" onclick="startLocalGame()">確認並分發角色</button>
+    <button class="btn btn-secondary" style="margin-top:0.55rem;" onclick="showScreen('mode')">返回</button>
+  </div>
+
+  <div id="screen-role" class="screen">
+    <div class="status-bar">
+      <span id="role-progress">1 / 6</span>
+      <span class="badge">身分確認</span>
+    </div>
+    <h2 id="role-player-name">玩家</h2>
+    <p class="subtitle" id="role-sub">請確認周圍無人偷窺</p>
+    <div class="role-card" id="role-card">
+      <div class="role-icon" id="role-icon">🐭</div>
+      <div class="role-name" id="role-name">貪睡鼠</div>
+      <div class="role-desc" id="role-desc">找出奶酪大盜</div>
+    </div>
+    <button class="btn btn-primary" id="btn-role-next" onclick="nextRoleLocal()">我記住了，換下一位</button>
+  </div>
+
+  <div id="screen-dice" class="screen">
+    <div class="status-bar">
+      <span id="dice-progress">1 / 6</span>
+      <span class="badge">擲骰確認</span>
+    </div>
+    <h2 id="dice-player-name">玩家</h2>
+    <p class="subtitle">此點數為你在第幾小時睜眼</p>
+    <div style="text-align:center;margin:1.5rem 0;">
+      <div class="dice" id="dice-display">?</div>
+      <p id="dice-hint" style="color:var(--muted);">點擊擲骰</p>
+    </div>
+    <button class="btn btn-primary" id="btn-roll" onclick="rollDiceLocal()">點擊擲骰</button>
+    <button class="btn btn-secondary hidden" id="btn-dice-next" onclick="nextDiceLocal()" style="margin-top:0.55rem;">傳給下一位</button>
+  </div>
+
+  <div id="screen-night" class="screen night-bg">
+    <div class="status-bar">
+      <span>夜晚階段</span>
+      <span class="badge" id="night-phase-badge">準備</span>
+    </div>
+    <div class="clock" id="night-clock">🌙</div>
+    <div class="night-instruction" id="night-instruction">全員請閉眼</div>
+    <div id="night-actions" class="hidden"></div>
+    <button class="btn btn-primary hidden" id="btn-night-continue">繼續</button>
+  </div>
+
+  <div id="screen-day" class="screen">
+    <div class="status-bar">
+      <span>白天討論</span>
+      <span class="badge">公開辯論</span>
+    </div>
+    <div style="text-align:center;margin:0.75rem 0;">
+      <div style="font-size:3.5rem;">🧀</div>
+      <h2>芝士被偷走了！</h2>
+      <p class="subtitle">不可直接展示手機點數<br>進行言語推理與辯駁</p>
+    </div>
+    <div class="card">
+      <div style="text-align:center;font-size:2.2rem;font-weight:900;color:var(--cheese);margin:0.4rem 0;" id="day-timer">05:00</div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="toggleDayTimer()">暫停 / 繼續</button>
+        <button class="btn btn-secondary" onclick="resetDayTimer()">重置</button>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="btn-go-vote" onclick="goToVote()">進入指認投票</button>
+  </div>
+
+  <div id="screen-vote" class="screen">
+    <div class="status-bar">
+      <span>投票階段</span>
+      <span class="badge">不記名結算</span>
+    </div>
+    <h2>請指認芝士大盜</h2>
+    <p class="subtitle" id="vote-current-player">投票人：玩家</p>
+    <div class="vote-list" id="vote-list"></div>
+    <button class="btn btn-primary" id="btn-cast-vote" onclick="castVoteLocal()" disabled>確認送出</button>
+  </div>
+
+  <div id="screen-result" class="screen">
+    <h2>遊戲結算</h2>
+    <div class="result-box" id="result-box">
+      <div style="font-size:3.2rem;" id="result-icon">🧀</div>
+      <div style="font-size:1.4rem;font-weight:900;margin:0.4rem 0;" id="result-title">結算中</div>
+      <div id="result-desc" style="color:var(--muted);line-height:1.5;"></div>
+    </div>
+    <div class="card" id="result-details" style="font-size:0.88rem;line-height:1.65;"></div>
+    <button class="btn btn-primary" onclick="afterResult()">再玩一局</button>
+    <button class="btn btn-secondary" style="margin-top:0.55rem;" onclick="goHome()">返回主頁</button>
+  </div>
+
+  <div id="screen-mp-wait" class="screen">
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+      <div style="font-size:3.5rem;" class="waiting-pulse">🧀</div>
+      <h2 id="mp-wait-title">請稍候…</h2>
+      <p class="subtitle" id="mp-wait-desc">正在同步其他玩家的操作</p>
+    </div>
+  </div>
+
+  <div id="pass-cover" class="pass-cover hidden">
+    <div style="font-size:3.2rem;margin-bottom:0.75rem;">📱➡️</div>
+    <h2 style="color:var(--cheese);">請將手機遞給</h2>
+    <div class="pass-name" id="pass-name">玩家</div>
+    <p style="color:var(--muted);font-size:0.92rem;line-height:1.55;max-width:260px;margin-bottom:1.5rem;">
+      長按下方圓鈕解鎖以確認身分
+    </p>
+    <button class="hold-btn" id="hold-btn" type="button">
+      <div class="hold-progress" id="hold-progress"></div>
+      <div class="hold-inner">
+        <div style="font-size:1.6rem;margin-bottom:0.15rem;">🔒</div>
+        <div>長按解鎖</div>
+      </div>
+    </button>
+  </div>
+
+  <div id="private-view" class="private-view hidden">
+    <div id="private-content" style="width:100%;max-width:320px;display:flex;flex-direction:column;align-items:center;"></div>
+  </div>
+
+  <script>
+    const ROLE = { THIEF: 'thief', SLEEPY: 'sleepy', SCAPEGOAT: 'scapegoat' };
+    const HOLD_MS = 1000;
+
+    const state = {
+      mode: 'local',
+      isHost: false,
+      playerCount: 6,
+      useScapegoat: false,
+      useAccomplice: true,
+      players: [],
+      currentIndex: 0,
+      nightHour: 0,
+      dayTimer: null,
+      daySeconds: 300,
+      dayRunning: false,
+      votes: {},
+      currentVoter: 0,
+      selectedVote: null,
+      nightLog: [],
+      passCallback: null,
+      holdTimer: null,
+      holdStart: 0,
+      roomCode: '',
+      myPeerId: '',
+      myName: '',
+      myPlayerId: '',
+      peer: null,
+      connections: {},
+      hostConn: null,
+      lobbyPlayers: [],
+      mpUseAccomp: true,
+      mpUseScape: false,
+      myRole: null,
+      myDie: 0,
+      gameStarted: false,
+      mpVotes: {}
+    };
+
+    function speak(text) {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'zh-HK';
+        u.rate = 0.95;
+        window.speechSynthesis.speak(u);
+      }
+    }
+
+    function showScreen(id) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      const el = document.getElementById('screen-' + id);
+      if (el) el.classList.add('active');
+    }
+
+    function goHome() {
+      stopDayTimer();
+      hidePassCover();
+      document.getElementById('private-view').classList.add('hidden');
+      cleanupPeer();
+      state.mode = 'local';
+      state.gameStarted = false;
+      showScreen('home');
+    }
+
+    function goToSetupLocal() {
+      state.mode = 'local';
+      state.playerCount = 6;
+      state.useScapegoat = false;
+      state.useAccomplice = true;
+      document.querySelectorAll('#player-count-btns button').forEach(b => {
+        b.classList.toggle('selected', +b.dataset.n === 6);
+      });
+      document.getElementById('opt-scapegoat').classList.remove('selected');
+      document.getElementById('opt-accomplice').classList.add('selected');
+      buildNameInputs();
+      showScreen('setup');
+    }
+
+    function toggleScapegoat() {
+      if (state.playerCount < 6) return;
+      state.useScapegoat = !state.useScapegoat;
+      document.getElementById('opt-scapegoat').classList.toggle('selected', state.useScapegoat);
+    }
+    function toggleAccomplice() {
+      if (state.playerCount < 5) return;
+      state.useAccomplice = !state.useAccomplice;
+      document.getElementById('opt-accomplice').classList.toggle('selected', state.useAccomplice);
+    }
+    function toggleMpAccomp() {
+      state.mpUseAccomp = !state.mpUseAccomp;
+      document.getElementById('mp-opt-accomp').classList.toggle('selected', state.mpUseAccomp);
+    }
+    function toggleMpScape() {
+      state.mpUseScape = !state.mpUseScape;
+      document.getElementById('mp-opt-scape').classList.toggle('selected', state.mpUseScape);
+    }
+
+    document.getElementById('player-count-btns').addEventListener('click', e => {
+      if (e.target.tagName !== 'BUTTON') return;
+      document.querySelectorAll('#player-count-btns button').forEach(b => b.classList.remove('selected'));
+      e.target.classList.add('selected');
+      state.playerCount = +e.target.dataset.n;
+      if (state.playerCount < 6) {
+        state.useScapegoat = false;
+        document.getElementById('opt-scapegoat').classList.remove('selected');
+      }
+      if (state.playerCount < 5) {
+        state.useAccomplice = false;
+        document.getElementById('opt-accomplice').classList.remove('selected');
+      }
+      buildNameInputs();
+    });
+
+    function buildNameInputs() {
+      const list = document.getElementById('name-list');
+      list.innerHTML = '';
+      for (let i = 0; i < state.playerCount; i++) {
+        const div = document.createElement('div');
+        div.className = 'name-item';
+        div.innerHTML = `<div class="num">${i+1}</div><input type="text" value="玩家${i+1}" data-idx="${i}" maxlength="10">`;
+        list.appendChild(div);
+      }
+    }
+
+    // ====== 解鎖防窺遮罩 ======
+    function showPassCover(name, onUnlocked) {
+      state.passCallback = onUnlocked;
+      document.getElementById('pass-name').textContent = name;
+      const btn = document.getElementById('hold-btn');
+      const progress = document.getElementById('hold-progress');
+      btn.classList.remove('holding', 'done');
+      progress.style.setProperty('--progress', '0%');
+      document.getElementById('pass-cover').classList.remove('hidden');
+    }
+    function hidePassCover() {
+      document.getElementById('pass-cover').classList.add('hidden');
+      clearHold();
+    }
+    function clearHold() {
+      if (state.holdTimer) cancelAnimationFrame(state.holdTimer);
+      state.holdTimer = null;
+      state.holdStart = 0;
+      document.getElementById('hold-progress').style.setProperty('--progress', '0%');
+      document.getElementById('hold-btn').classList.remove('holding', 'done');
+    }
+    function startHold(e) {
+      e.preventDefault();
+      clearHold();
+      state.holdStart = performance.now();
+      document.getElementById('hold-btn').classList.add('holding');
+      const tick = (now) => {
+        const elapsed = now - state.holdStart;
+        const pct = Math.min(100, (elapsed / HOLD_MS) * 100);
+        document.getElementById('hold-progress').style.setProperty('--progress', pct + '%');
+        if (elapsed >= HOLD_MS) {
+          document.getElementById('hold-btn').classList.add('done');
+          setTimeout(() => {
+            hidePassCover();
+            if (state.passCallback) {
+              const cb = state.passCallback;
+              state.passCallback = null;
+              cb();
+            }
+          }, 100);
+          return;
+        }
+        state.holdTimer = requestAnimationFrame(tick);
+      };
+      state.holdTimer = requestAnimationFrame(tick);
+    }
+    const hBtn = document.getElementById('hold-btn');
+    hBtn.addEventListener('touchstart', startHold, { passive: false });
+    hBtn.addEventListener('touchend', clearHold, { passive: false });
+    hBtn.addEventListener('mousedown', startHold);
+    hBtn.addEventListener('mouseup', clearHold);
+
+    // ====== 單機遊戲邏輯 ======
+    function startLocalGame() {
+      const inputs = document.querySelectorAll('#name-list input');
+      const names = [...inputs].map((inp, i) => inp.value.trim() || `玩家${i+1}`);
+      let roles = [ROLE.THIEF];
+      const sleepy = state.playerCount - 1 - (state.useScapegoat ? 1 : 0);
+      for (let i = 0; i < sleepy; i++) roles.push(ROLE.SLEEPY);
+      if (state.useScapegoat) roles.push(ROLE.SCAPEGOAT);
+      roles.sort(() => Math.random() - 0.5);
+
+      state.players = names.map((name, i) => ({
+        name, role: roles[i], die: 0, accomplice: false, votes: 0, id: 'p' + i
+      }));
+      state.currentIndex = 0;
+      state.nightLog = [];
+      showRoleLocal();
+    }
+
+    function fillRoleCard(role) {
+      const card = document.getElementById('role-card');
+      card.className = 'role-card';
+      if (role === ROLE.THIEF) {
+        card.classList.add('thief');
+        document.getElementById('role-icon').textContent = '🕵️🧀';
+        document.getElementById('role-name').textContent = '奶酪大盜';
+        document.getElementById('role-desc').textContent = '在你的骰子小時偷走起司，白天隱藏身分！';
+      } else if (role === ROLE.SCAPEGOAT) {
+        card.classList.add('scapegoat');
+        document.getElementById('role-icon').textContent = '🎭';
+        document.getElementById('role-name').textContent = '背鍋鼠';
+        document.getElementById('role-desc').textContent = '在白天誘導大家把票投給你，獨自取勝！';
+      } else {
+        document.getElementById('role-icon').textContent = '🐭💤';
+        document.getElementById('role-name').textContent = '貪睡鼠';
+        document.getElementById('role-desc').textContent = '在醒來時觀察局勢，在白天抓出大盜！';
+      }
+    }
+
+    function showRoleLocal() {
+      const p = state.players[state.currentIndex];
+      showPassCover(p.name, () => {
+        showScreen('role');
+        document.getElementById('role-progress').textContent = `${state.currentIndex+1} / ${state.playerCount}`;
+        document.getElementById('role-player-name').textContent = p.name;
+        fillRoleCard(p.role);
+        document.getElementById('btn-role-next').textContent =
+          state.currentIndex === state.playerCount - 1 ? '身分確認完畢，開始擲骰' : '記住了，傳給下一位';
+      });
+    }
+
+    function nextRoleLocal() {
+      state.currentIndex++;
+      if (state.currentIndex >= state.playerCount) {
+        state.currentIndex = 0;
+        showDiceLocal();
+      } else {
+        showRoleLocal();
+      }
+    }
+
+    function showDiceLocal() {
+      const p = state.players[state.currentIndex];
+      showPassCover(p.name, () => {
+        showScreen('dice');
+        document.getElementById('dice-progress').textContent = `${state.currentIndex+1} / ${state.playerCount}`;
+        document.getElementById('dice-player-name').textContent = p.name;
+        document.getElementById('dice-display').textContent = '?';
+        document.getElementById('dice-hint').textContent = '點擊按鈕獲取點數';
+        document.getElementById('btn-roll').classList.remove('hidden');
+        document.getElementById('btn-dice-next').classList.add('hidden');
+      });
+    }
+
+    function rollDiceLocal() {
+      const d = Math.floor(Math.random() * 6) + 1;
+      state.players[state.currentIndex].die = d;
+      document.getElementById('dice-display').textContent = d;
+      document.getElementById('dice-hint').textContent = `你在第 ${d} 小時睜眼`;
+      document.getElementById('btn-roll').classList.add('hidden');
+      document.getElementById('btn-dice-next').classList.remove('hidden');
+      document.getElementById('btn-dice-next').textContent =
+        state.currentIndex === state.playerCount - 1 ? '全部擲完，天黑請閉眼' : '記住了，傳給下一位';
+    }
+
+    function nextDiceLocal() {
+      state.currentIndex++;
+      if (state.currentIndex >= state.playerCount) {
+        startNightLocal();
+      } else {
+        showDiceLocal();
+      }
+    }
+
+    function startNightLocal() {
+      showScreen('night');
+      state.nightHour = 0;
+      document.getElementById('night-clock').textContent = '🌙';
+      document.getElementById('night-instruction').innerHTML = '天黑請閉眼，所有人把雙手放平在桌上。';
+      speak('天黑請閉眼，所有人請把眼睛閉上。');
+      document.getElementById('btn-night-continue').classList.remove('hidden');
+      document.getElementById('btn-night-continue').textContent = '開始夜巡';
+      document.getElementById('btn-night-continue').onclick = () => {
+        state.nightHour = 1;
+        runNightHourLocal();
+      };
+    }
+
+    function runNightHourLocal() {
+      if (state.nightHour > 6) {
+        if (state.useAccomplice && state.playerCount >= 5) handleAccompLocal();
+        else endNightLocal();
+        return;
+      }
+      document.getElementById('night-clock').textContent = state.nightHour;
+      document.getElementById('night-phase-badge').textContent = state.nightHour + ' 點';
+      document.getElementById('night-instruction').innerHTML = `第 <strong>${state.nightHour} 小時</strong>醒來。`;
+      speak(`第 ${state.nightHour} 小時醒來。`);
+      document.getElementById('btn-night-continue').classList.add('hidden');
+
+      const awake = state.players.filter(p => p.die === state.nightHour);
+      if (awake.length === 0) {
+        setTimeout(() => {
+          speak(`第 ${state.nightHour} 小時請閉眼。`);
+          state.nightHour++;
+          setTimeout(runNightHourLocal, 1500);
+        }, 3500);
+      } else {
+        document.getElementById('btn-night-continue').classList.remove('hidden');
+        document.getElementById('btn-night-continue').textContent = '此小時醒來的人執行動作';
+        document.getElementById('btn-night-continue').onclick = () => {
+          let i = 0;
+          function loop() {
+            if (i >= awake.length) {
+              speak(`第 ${state.nightHour} 小時請閉眼。`);
+              state.nightHour++;
+              setTimeout(runNightHourLocal, 1000);
+              return;
+            }
+            showPassCover(awake[i].name, () => {
+              showPrivateAction(awake[i], awake.length === 1, () => { i++; loop(); });
+            });
+          }
+          loop();
+        };
+      }
+    }
+
+    function showPrivateAction(actor, isAlone, done) {
+      const pv = document.getElementById('private-view');
+      const content = document.getElementById('private-content');
+      pv.classList.remove('hidden');
+
+      if (actor.role === ROLE.THIEF) {
+        content.innerHTML = `
+          <div style="font-size:3.5rem;">🕵️🧀</div>
+          <h2 style="color:var(--accent2);">${actor.name}</h2>
+          <p style="margin:0.8rem 0;">你是奶酪大盜！請在桌上拿走芝士。</p>
+          <button class="btn btn-danger" id="act-steal">已拿走芝士</button>
+        `;
+        document.getElementById('act-steal').onclick = () => {
+          state.nightLog.push(`${actor.name}（大盜）拿走了起司`);
+          pv.classList.add('hidden');
+          done();
+        };
+      } else if (isAlone) {
+        const others = state.players.filter(p => p.name !== actor.name);
+        content.innerHTML = `
+          <div style="font-size:3rem;">🐭👀</div>
+          <h2>${actor.name}</h2>
+          <p style="margin:0.8rem 0;">你是唯一醒來的老鼠，可偷看一名玩家的點數：</p>
+          <div class="peek-list" id="peek-list"></div>
+        `;
+        const pl = document.getElementById('peek-list');
+        others.forEach(o => {
+          const b = document.createElement('button');
+          b.textContent = o.name;
+          b.onclick = () => {
+            content.innerHTML = `
+              <div style="font-size:2.5rem;">🎲</div>
+              <h2>${o.name}</h2>
+              <div style="font-size:3rem;font-weight:900;color:var(--cheese);margin:1rem 0;">${o.die} 點</div>
+              <button class="btn btn-primary" id="btn-peek-ok">記住了</button>
+            `;
+            state.nightLog.push(`${actor.name} 偷看了 ${o.name}（${o.die}點）`);
+            document.getElementById('btn-peek-ok').onclick = () => {
+              pv.classList.add('hidden');
+              done();
+            };
+          };
+          pl.appendChild(b);
+        });
+      } else {
+        content.innerHTML = `
+          <div style="font-size:3rem;">🐭👀</div>
+          <h2>${actor.name}</h2>
+          <p style="margin:0.8rem 0;">本小時有其他老鼠同時睜眼，只能彼此對視，不可偷看骰子！</p>
+          <button class="btn btn-primary" id="act-seen">確認</button>
+        `;
+        document.getElementById('act-seen').onclick = () => {
+          pv.classList.add('hidden');
+          done();
+        };
+      }
+    }
+
+    function handleAccompLocal() {
+      document.getElementById('night-clock').textContent = '🤝';
+      document.getElementById('night-instruction').textContent = '大盜指定同謀...';
+      const thief = state.players.find(p => p.role === ROLE.THIEF);
+      showPassCover(thief.name, () => {
+        const pv = document.getElementById('private-view');
+        const content = document.getElementById('private-content');
+        pv.classList.remove('hidden');
+        const cands = state.players.filter(p => p.role !== ROLE.THIEF);
+        content.innerHTML = `
+          <div style="font-size:3rem;">🤝</div>
+          <h2>指定共犯</h2>
+          <p style="margin:0.8rem 0;">選擇一位老鼠作為你的同謀：</p>
+          <div class="peek-list" id="ac-list"></div>
+        `;
+        cands.forEach(c => {
+          const btn = document.createElement('button');
+          btn.textContent = c.name;
+          btn.onclick = () => {
+            c.accomplice = true;
+            state.nightLog.push(`${c.name} 被指定為共犯`);
+            pv.classList.add('hidden');
+            endNightLocal();
+          };
+          document.getElementById('ac-list').appendChild(btn);
+        });
+      });
+    }
+
+    function endNightLocal() {
+      document.getElementById('night-clock').textContent = '☀️';
+      document.getElementById('night-instruction').innerHTML = '天亮了，全員請睜眼！<br>檢查桌上起司是否遺失。';
+      speak('天亮了，所有人請睜眼！');
+      document.getElementById('btn-night-continue').classList.remove('hidden');
+      document.getElementById('btn-night-continue').textContent = '進入白天討論';
+      document.getElementById('btn-night-continue').onclick = () => {
+        showScreen('day');
+        state.daySeconds = 300;
+        updateDayTimerDisplay();
+      };
+    }
+
+    // 白天計時器
+    function updateDayTimerDisplay() {
+      const m = String(Math.floor(state.daySeconds / 60)).padStart(2, '0');
+      const s = String(state.daySeconds % 60).padStart(2, '0');
+      document.getElementById('day-timer').textContent = `${m}:${s}`;
+    }
+    function toggleDayTimer() {
+      if (state.dayRunning) stopDayTimer();
+      else {
+        state.dayRunning = true;
+        state.dayTimer = setInterval(() => {
+          if (state.daySeconds > 0) {
+            state.daySeconds--;
+            updateDayTimerDisplay();
+          } else {
+            stopDayTimer();
+          }
+        }, 1000);
+      }
+    }
+    function stopDayTimer() {
+      state.dayRunning = false;
+      if (state.dayTimer) clearInterval(state.dayTimer);
+    }
+    function resetDayTimer() {
+      stopDayTimer();
+      state.daySeconds = 300;
+      updateDayTimerDisplay();
+    }
+
+    function goToVote() {
+      stopDayTimer();
+      state.currentVoter = 0;
+      state.selectedVote = null;
+      state.players.forEach(p => p.votes = 0);
+      showVoteLocal();
+    }
+
+    function showVoteLocal() {
+      const p = state.players[state.currentVoter];
+      showPassCover(p.name, () => {
+        showScreen('vote');
+        document.getElementById('vote-current-player').textContent = `投票人：${p.name}`;
+        const vl = document.getElementById('vote-list');
+        vl.innerHTML = '';
+        state.players.forEach((target, idx) => {
+          const div = document.createElement('div');
+          div.className = 'vote-item';
+          div.innerHTML = `<span>${target.name}</span>`;
+          div.onclick = () => {
+            document.querySelectorAll('.vote-item').forEach(e => e.classList.remove('selected'));
+            div.classList.add('selected');
+            state.selectedVote = idx;
+            document.getElementById('btn-cast-vote').disabled = false;
+          };
+          vl.appendChild(div);
+        });
+        document.getElementById('btn-cast-vote').disabled = true;
+      });
+    }
+
+    function castVoteLocal() {
+      state.players[state.selectedVote].votes++;
+      state.currentVoter++;
+      if (state.currentVoter >= state.players.length) {
+        calcResult();
+      } else {
+        showVoteLocal();
+      }
+    }
+
+    function calcResult() {
+      showScreen('result');
+      let maxV = -1;
+      state.players.forEach(p => { if (p.votes > maxV) maxV = p.votes; });
+      const top = state.players.filter(p => p.votes === maxV);
+      const thiefCaught = top.some(p => p.role === ROLE.THIEF);
+      const scapeCaught = top.some(p => p.role === ROLE.SCAPEGOAT) && state.useScapegoat;
+
+      const box = document.getElementById('result-box');
+      box.className = 'result-box';
+
+      if (scapeCaught) {
+        box.classList.add('win-scapegoat');
+        document.getElementById('result-icon').textContent = '🎭';
+        document.getElementById('result-title').textContent = '背鍋鼠獲勝！';
+        document.getElementById('result-desc').textContent = '成功引誘眾人指認，一人獨享大勝！';
+      } else if (thiefCaught) {
+        box.classList.add('win-good');
+        document.getElementById('result-icon').textContent = '🐭🎉';
+        document.getElementById('result-title').textContent = '貪睡鼠獲勝！';
+        document.getElementById('result-desc').textContent = '大盜成功落網，芝士重獲保衛！';
+      } else {
+        box.classList.add('win-evil');
+        document.getElementById('result-icon').textContent = '🕵️🧀';
+        document.getElementById('result-title').textContent = '奶酪大盜獲勝！';
+        document.getElementById('result-desc').textContent = '大盜瞞天過海，享受香濃芝士！';
+      }
+
+      let h = '<p><strong>得票明細：</strong></p>';
+      state.players.forEach(p => {
+        let r = p.role === ROLE.THIEF ? '🧀 大盜' : p.role === ROLE.SCAPEGOAT ? '🎭 背鍋鼠' : '🐭 貪睡鼠';
+        if (p.accomplice) r += '（共犯）';
+        h += `<div>${p.name}：${p.votes} 票 ｜ 身分：${r} ｜ 骰子：${p.die} 點</div>`;
+      });
+      if (state.nightLog.length) {
+        h += '<br><p><strong>夜間行動日誌：</strong></p>';
+        state.nightLog.forEach(l => h += `<div>• ${l}</div>`);
+      }
+      document.getElementById('result-details').innerHTML = h;
+    }
+
+    function afterResult() {
+      if (state.mode === 'multi') {
+        if (state.isHost) {
+          state.gameStarted = false;
+          broadcast({ type: 'back_lobby' });
+          showLobbyUI();
+        } else {
+          showScreen('mp-wait');
+        }
+      } else {
+        goToSetupLocal();
+      }
+    }
+
+    // ====== 多人連線 (PeerJS WebRTC) ======
+    function genCode() {
+      const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let res = '';
+      for (let i = 0; i < 4; i++) res += c[Math.floor(Math.random() * c.length)];
+      return res;
+    }
+    function peerIdFromCode(code) {
+      return 'ct-' + code.toUpperCase();
+    }
+    function cleanupPeer() {
+      try {
+        Object.values(state.connections).forEach(c => c.close());
+        if (state.hostConn) state.hostConn.close();
+        if (state.peer) state.peer.destroy();
+      } catch(e){}
+      state.connections = {};
+      state.hostConn = null;
+      state.peer = null;
+      state.lobbyPlayers = [];
+    }
+    function sendTo(c, d) { if (c && c.open) c.send(d); }
+    function broadcast(d) { Object.values(state.connections).forEach(c => sendTo(c, d)); }
+
+    function goCreateRoom() {
+      document.getElementById('create-status').textContent = '';
+      document.getElementById('host-name').value = localStorage.getItem('ct_name') || '房主';
+      showScreen('create');
+    }
+
+    function createRoom() {
+      const name = (document.getElementById('host-name').value.trim() || '房主').slice(0, 8);
+      localStorage.setItem('ct_name', name);
+      state.myName = name;
+      state.isHost = true;
+      state.mode = 'multi';
+      state.gameStarted = false;
+      state.roomCode = genCode();
+      state.mpUseAccomp = document.getElementById('mp-opt-accomp').classList.contains('selected');
+      state.mpUseScape = document.getElementById('mp-opt-scape').classList.contains('selected');
+      state.useScapegoat = state.mpUseScape;
+      state.useAccomplice = state.mpUseAccomp;
+
+      const s = document.getElementById('create-status');
+      s.textContent = '連線 PeerJS 伺服器中...';
+      s.className = 'conn-status';
+      document.getElementById('btn-create-room').disabled = true;
+
+      try { if (state.peer) state.peer.destroy(); } catch (e) {}
+
+      const ice = {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      };
+
+      state.peer = new Peer(peerIdFromCode(state.roomCode), { debug: 1, config: ice });
+
+      state.peer.on('open', (id) => {
+        state.myPeerId = id;
+        state.myPlayerId = 'host';
+        state.lobbyPlayers = [{ id: 'host', name, isHost: true, peerId: id }];
+        document.getElementById('btn-create-room').disabled = false;
+        s.textContent = '房間已建立';
+        s.className = 'conn-status ok';
+        showLobbyUI();
+      });
+
+      state.peer.on('connection', (conn) => {
+        conn.on('data', (d) => handleHostReceive(conn, d));
+        conn.on('close', () => {
+          delete state.connections[conn.peer];
+          if (!state.gameStarted) {
+            state.lobbyPlayers = state.lobbyPlayers.filter(p => p.peerId !== conn.peer);
+            broadcastLobby();
+          }
+        });
+        conn.on('error', () => {});
+      });
+
+      state.peer.on('error', (err) => {
+        console.warn('Peer error', err);
+        document.getElementById('btn-create-room').disabled = false;
+        const t = err && err.type;
+        if (t === 'unavailable-id') {
+          s.textContent = '房號被佔用，正在重試…';
+          try { state.peer.destroy(); } catch (e) {}
+          state.peer = null;
+          setTimeout(() => createRoom(), 400);
+        } else {
+          s.textContent = '連線失敗，請再按一次「建立房間」';
+          s.className = 'conn-status err';
+        }
+      });
+    }
+
+    function handleHostReceive(conn, d) {
+      if (!d || !d.type) return;
+      if (d.type === 'hello') {
+        if (state.gameStarted || state.lobbyPlayers.length >= 8) {
+          sendTo(conn, { type: 'err', msg: '房間已滿或遊戲已開始' });
+          try { conn.close(); } catch (e) {}
+          return;
+        }
+        state.lobbyPlayers = state.lobbyPlayers.filter(p => p.peerId !== conn.peer);
+        const pid = 'p_' + Math.random().toString(36).slice(2, 6);
+        state.connections[conn.peer] = conn;
+        state.lobbyPlayers.push({ id: pid, name: (d.name || '玩家').slice(0, 10), isHost: false, peerId: conn.peer });
+        sendTo(conn, {
+          type: 'welcome',
+          playerId: pid,
+          code: state.roomCode,
+          players: state.lobbyPlayers
+        });
+        broadcastLobby();
+      } else if (d.type === 'vote') {
+        if (!state.mpVotes) state.mpVotes = {};
+        if (state.mpVotes[d.playerId]) return;
+        state.mpVotes[d.playerId] = d.targetId;
+        const target = state.players.find(p => p.id === d.targetId);
+        if (target) target.votes = (target.votes || 0) + 1;
+        finishMpVoteIfReady();
+      }
+    }
+
+    function finishMpVoteIfReady() {
+      if (!state.mpVotes) return;
+      const n = Object.keys(state.mpVotes).length;
+      if (n < state.players.length) {
+        const st = document.getElementById('mp-wait-desc') || document.getElementById('lobby-status');
+        if (st) st.textContent = '投票中 ' + n + '/' + state.players.length;
+        return;
+      }
+      state.useScapegoat = state.mpUseScape;
+      broadcast({
+        type: 'result',
+        players: state.players,
+        nightLog: state.nightLog || [],
+        useScapegoat: state.mpUseScape
+      });
+      calcResult();
+    }
+
+    function broadcastLobby() {
+      broadcast({ type: 'lobby', players: state.lobbyPlayers });
+      renderLobbyList();
+    }
+
+    function updateStartButton() {
+      const btn = document.getElementById('btn-start-mp');
+      const status = document.getElementById('lobby-status');
+      if (!btn) return;
+      if (state.isHost && !state.gameStarted) {
+        btn.classList.remove('hidden');
+        const n = state.lobbyPlayers.length;
+        const ok = n >= 4;
+        btn.disabled = !ok;
+        btn.textContent = ok ? ('開始遊戲（' + n + ' 人）') : ('開始遊戲（還差 ' + (4 - n) + ' 人）');
+        if (status) {
+          status.textContent = ok ? '人已到齊，可以開始！' : ('目前 ' + n + ' 人，至少 4 人才能開始');
+          status.className = 'conn-status' + (ok ? ' ok' : '');
+        }
+      } else {
+        btn.classList.add('hidden');
+        if (status && !state.isHost) {
+          status.textContent = '等待房主開始遊戲…';
+          status.className = 'conn-status';
+        }
+      }
+    }
+
+    function renderLobbyList() {
+      const list = document.getElementById('lobby-players');
+      if (!list) return;
+      list.innerHTML = '';
+      state.lobbyPlayers.forEach(p => {
+        const div = document.createElement('div');
+        div.className = 'lobby-player' + (p.isHost ? ' host' : '') + (p.id === state.myPlayerId ? ' me' : '');
+        div.innerHTML = '<span class="dot"></span><span>' + p.name + (p.isHost ? '（房主）' : '') + (p.id === state.myPlayerId ? ' · 你' : '') + '</span>';
+        list.appendChild(div);
+      });
+      const countEl = document.getElementById('lobby-count');
+      if (countEl) countEl.textContent = state.lobbyPlayers.length + ' / 8';
+      updateStartButton();
+    }
+
+    function showLobbyUI() {
+      showScreen('lobby');
+      document.getElementById('lobby-code').textContent = state.roomCode;
+      const roleLabel = document.getElementById('lobby-role-label');
+      if (roleLabel) roleLabel.textContent = state.isHost ? '房主' : '已加入';
+      renderLobbyList();
+
+      const canvas = document.getElementById('qr-canvas');
+      const hint = document.getElementById('qr-hint');
+      let url = state.roomCode;
+      try {
+        if (location.protocol.indexOf('http') === 0) {
+          const u = new URL(location.href);
+          u.searchParams.set('room', state.roomCode);
+          url = u.toString();
+        }
+      } catch (e) {}
+
+      const drawFallback = (msg) => {
+        try {
+          const ctx = canvas.getContext('2d');
+          const w = canvas.width, h = canvas.height;
+          ctx.fillStyle = '#2c1810';
+          ctx.fillRect(0, 0, w, h);
+          ctx.fillStyle = '#ffd166';
+          ctx.font = 'bold 26px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(state.roomCode, w / 2, h / 2 - 10);
+          ctx.fillStyle = '#b8a99a';
+          ctx.font = '12px sans-serif';
+          ctx.fillText('請輸入房號加入', w / 2, h / 2 + 20);
+        } catch (e) {}
+        if (hint) hint.textContent = msg || '請讓朋友手動輸入上方房號';
+      };
+
+      if (typeof QRCode === 'undefined') {
+        drawFallback('QR 無法載入，請用房號加入');
+      } else {
+        try {
+          QRCode.toCanvas(canvas, url, { width: 170, margin: 2, color: { dark: '#1a120b', light: '#ffffff' } }, function(err) {
+            if (err) drawFallback('QR 失敗，請用房號加入');
+            else if (hint) hint.textContent = '掃 QR 或輸入房號：' + state.roomCode;
+          });
+        } catch (e) {
+          drawFallback('QR 失敗，請用房號加入');
+        }
+      }
+    }
+
+    function goJoinRoom() {
+      document.getElementById('join-status').textContent = '';
+      document.getElementById('join-name').value = localStorage.getItem('ct_name') || '玩家';
+      showScreen('join');
+    }
+
+    function joinRoom() {
+      const name = (document.getElementById('join-name').value.trim() || '玩家').slice(0, 8);
+      const code = document.getElementById('join-code').value.trim().toUpperCase();
+      localStorage.setItem('ct_name', name);
+      if (!code || code.length < 4) {
+        document.getElementById('join-status').textContent = '請輸入 4 碼房號';
+        document.getElementById('join-status').className = 'conn-status err';
+        return;
+      }
+      state.myName = name;
+      state.isHost = false;
+      state.mode = 'multi';
+      state.roomCode = code;
+      state.gameStarted = false;
+
+      const s = document.getElementById('join-status');
+      s.textContent = '連線房間中...';
+      s.className = 'conn-status';
+      document.getElementById('btn-join-room').disabled = true;
+
+      try { if (state.peer) state.peer.destroy(); } catch (e) {}
+
+      const ice = {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      };
+
+      state.peer = new Peer({ debug: 1, config: ice });
+      state.peer.on('open', () => {
+        const conn = state.peer.connect(peerIdFromCode(code), { reliable: true });
+        state.hostConn = conn;
+        conn.on('open', () => {
+          sendTo(conn, { type: 'hello', name });
+        });
+        conn.on('data', handleClientReceive);
+        conn.on('close', () => {
+          s.textContent = '與房主斷線';
+          s.className = 'conn-status err';
+        });
+        conn.on('error', () => {
+          s.textContent = '連線失敗，請確認房號';
+          s.className = 'conn-status err';
+          document.getElementById('btn-join-room').disabled = false;
+        });
+      });
+      state.peer.on('error', () => {
+        s.textContent = '找不到該房號，請確認後重試';
+        s.className = 'conn-status err';
+        document.getElementById('btn-join-room').disabled = false;
+      });
+    }
+
+    function handleClientReceive(d) {
+      if (!d || !d.type) return;
+      if (d.type === 'welcome') {
+        state.myPlayerId = d.playerId;
+        if (d.players) state.lobbyPlayers = d.players;
+        document.getElementById('btn-join-room').disabled = false;
+        document.getElementById('join-status').textContent = '已加入！';
+        document.getElementById('join-status').className = 'conn-status ok';
+        showLobbyUI();
+      } else if (d.type === 'lobby') {
+        state.lobbyPlayers = d.players;
+        renderLobbyList();
+      } else if (d.type === 'err') {
+        document.getElementById('join-status').textContent = d.msg || '無法加入';
+        document.getElementById('join-status').className = 'conn-status err';
+        document.getElementById('btn-join-room').disabled = false;
+      } else if (d.type === 'game_start') {
+        showScreen('role');
+        state.myRole = d.role;
+        state.myDie = d.die;
+        document.getElementById('role-player-name').textContent = state.myName;
+        fillRoleCard(d.role);
+        document.getElementById('btn-role-next').textContent = '確認骰子';
+        document.getElementById('btn-role-next').onclick = () => {
+          showScreen('dice');
+          document.getElementById('dice-player-name').textContent = state.myName;
+          document.getElementById('dice-display').textContent = d.die;
+          document.getElementById('dice-hint').textContent = `你在第 ${d.die} 小時睜眼`;
+          document.getElementById('btn-roll').classList.add('hidden');
+          document.getElementById('btn-dice-next').classList.remove('hidden');
+          document.getElementById('btn-dice-next').textContent = '已記住，等待天黑';
+          document.getElementById('btn-dice-next').onclick = () => showScreen('mp-wait');
+        };
+      } else if (d.type === 'night_tick') {
+        showScreen('night');
+        document.getElementById('night-clock').textContent = d.hour === 0 ? '🌙' : d.hour;
+        document.getElementById('night-instruction').textContent = d.msg;
+        if (d.hour === state.myDie) {
+          navigator.vibrate && navigator.vibrate(200);
+        }
+      } else if (d.type === 'day') {
+        showScreen('day');
+        state.daySeconds = 300;
+        updateDayTimerDisplay();
+      } else if (d.type === 'vote_start') {
+        showScreen('vote');
+        const vl = document.getElementById('vote-list');
+        vl.innerHTML = '';
+        d.players.forEach(p => {
+          const div = document.createElement('div');
+          div.className = 'vote-item';
+          div.innerHTML = `<span>${p.name}</span>`;
+          div.onclick = () => {
+            document.querySelectorAll('.vote-item').forEach(e => e.classList.remove('selected'));
+            div.classList.add('selected');
+            state.selectedVote = p.id;
+            document.getElementById('btn-cast-vote').disabled = false;
+          };
+          vl.appendChild(div);
+        });
+        document.getElementById('btn-cast-vote').onclick = () => {
+          sendTo(state.hostConn, { type: 'vote', playerId: state.myPlayerId, targetId: state.selectedVote });
+          showScreen('mp-wait');
+        };
+      } else if (d.type === 'result') {
+        state.players = d.players;
+        state.nightLog = d.nightLog;
+        calcResult();
+      } else if (d.type === 'back_lobby') {
+        showScreen('lobby');
+      }
+    }
+
+    function hostStartGame() {
+      if (!state.isHost || state.lobbyPlayers.length < 4) return;
+      state.gameStarted = true;
+      state.nightLog = [];
+      state.mpVotes = {};
+      const n = state.lobbyPlayers.length;
+      let roles = [ROLE.THIEF];
+      const sleepy = n - 1 - (state.mpUseScape && n >= 6 ? 1 : 0);
+      for (let i = 0; i < sleepy; i++) roles.push(ROLE.SLEEPY);
+      if (state.mpUseScape && n >= 6) roles.push(ROLE.SCAPEGOAT);
+      roles.sort(() => Math.random() - 0.5);
+
+      state.players = state.lobbyPlayers.map((p, i) => ({
+        id: p.id,
+        name: p.name,
+        peerId: p.peerId,
+        isHost: p.isHost,
+        role: roles[i],
+        die: Math.floor(Math.random() * 6) + 1,
+        votes: 0
+      }));
+
+      state.players.forEach(p => {
+        if (!p.isHost) {
+          sendTo(state.connections[p.peerId], {
+            type: 'game_start',
+            role: p.role,
+            die: p.die
+          });
+        }
+      });
+
+      const me = state.players.find(p => p.isHost);
+      state.myRole = me.role;
+      state.myDie = me.die;
+      showScreen('role');
+      document.getElementById('role-player-name').textContent = state.myName;
+      fillRoleCard(me.role);
+      document.getElementById('btn-role-next').textContent = '確認骰子';
+      document.getElementById('btn-role-next').onclick = () => {
+        showScreen('dice');
+        document.getElementById('dice-player-name').textContent = state.myName;
+        document.getElementById('dice-display').textContent = me.die;
+        document.getElementById('btn-roll').classList.add('hidden');
+        document.getElementById('btn-dice-next').classList.remove('hidden');
+        document.getElementById('btn-dice-next').textContent = '全員開始夜晚計時';
+        document.getElementById('btn-dice-next').onclick = hostRunNightSequence;
+      };
+    }
+
+    function hostRunNightSequence() {
+      let h = 0;
+      showScreen('night');
+      const step = () => {
+        if (h === 0) {
+          broadcast({ type: 'night_tick', hour: 0, msg: '天黑請閉眼...' });
+          document.getElementById('night-clock').textContent = '🌙';
+          speak('天黑請閉眼。');
+          h++;
+          setTimeout(step, 4000);
+        } else if (h <= 6) {
+          broadcast({ type: 'night_tick', hour: h, msg: `第 ${h} 小時醒來` });
+          document.getElementById('night-clock').textContent = h;
+          speak(`第 ${h} 小時醒來。`);
+          setTimeout(() => {
+            speak(`第 ${h} 小時閉眼。`);
+            h++;
+            setTimeout(step, 1500);
+          }, 4500);
+        } else {
+          broadcast({ type: 'day' });
+          speak('天亮了，全員請睜眼！');
+          showScreen('day');
+          state.daySeconds = 300;
+          updateDayTimerDisplay();
+          document.getElementById('btn-go-vote').classList.remove('hidden');
+          document.getElementById('btn-go-vote').textContent = '進入投票';
+          document.getElementById('btn-go-vote').onclick = hostStartMpVote;
+        }
+      };
+      step();
+    }
+
+    function hostStartMpVote() {
+      state.mpVotes = {};
+      state.players.forEach(p => { p.votes = 0; });
+      const publicPlayers = state.players.map(p => ({ id: p.id, name: p.name }));
+      broadcast({ type: 'vote_start', players: publicPlayers });
+      // 房主自己也要投票
+      showScreen('vote');
+      document.getElementById('vote-current-player').textContent = '請投票（' + state.myName + '）';
+      const vl = document.getElementById('vote-list');
+      vl.innerHTML = '';
+      state.selectedVote = null;
+      publicPlayers.forEach(p => {
+        const div = document.createElement('div');
+        div.className = 'vote-item';
+        div.innerHTML = '<span>' + p.name + (p.id === state.myPlayerId ? '（自己）' : '') + '</span>';
+        div.onclick = () => {
+          document.querySelectorAll('.vote-item').forEach(e => e.classList.remove('selected'));
+          div.classList.add('selected');
+          state.selectedVote = p.id;
+          document.getElementById('btn-cast-vote').disabled = false;
+        };
+        vl.appendChild(div);
+      });
+      document.getElementById('btn-cast-vote').disabled = true;
+      document.getElementById('btn-cast-vote').textContent = '確認投票';
+      document.getElementById('btn-cast-vote').onclick = () => {
+        if (!state.selectedVote) return;
+        document.getElementById('btn-cast-vote').disabled = true;
+        if (!state.mpVotes) state.mpVotes = {};
+        state.mpVotes[state.myPlayerId] = state.selectedVote;
+        const target = state.players.find(p => p.id === state.selectedVote);
+        if (target) target.votes = (target.votes || 0) + 1;
+        showScreen('mp-wait');
+        document.getElementById('mp-wait-title').textContent = '已投票';
+        document.getElementById('mp-wait-desc').textContent = '等待其他人…';
+        finishMpVoteIfReady();
+      };
+    }
+
+    function leaveRoom() {
+      cleanupPeer();
+      showScreen('mode');
+    }
+
+    // URL 帶房號自動填入
+    window.addEventListener('DOMContentLoaded', () => {
+      buildNameInputs();
+      const params = new URLSearchParams(window.location.search);
+      const r = params.get('room');
+      if (r) {
+        goJoinRoom();
+        document.getElementById('join-code').value = r.toUpperCase();
+      }
+    });
+  </script>
+</body>
+</html>
