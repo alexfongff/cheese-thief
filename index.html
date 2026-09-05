@@ -1524,37 +1524,100 @@
       document.getElementById('lobby-code').textContent = state.roomCode;
       document.getElementById('lobby-role-label').textContent = state.isHost ? '房主' : '已加入';
       renderLobbyList();
-      // QR
-      const canvas = document.getElementById('qr-canvas');
-      let joinUrl;
-      try {
-        const u = new URL(location.href);
-        u.searchParams.set('room', state.roomCode);
-        joinUrl = u.toString();
-      } catch (e) {
-        joinUrl = state.roomCode;
-      }
-      // For file:// QR still shows the code as text fallback via library
-      QRCode.toCanvas(canvas, joinUrl, {
-        width: 180,
-        margin: 1,
-        color: { dark: '#1a120b', light: '#ffffff' }
-      }, (err) => {
-        if (err) console.warn(err);
-      });
-      document.getElementById('qr-hint').textContent =
-        location.protocol === 'file:'
-          ? '本機檔案模式：請讓其他人手動輸入房號'
-          : '掃 QR 開啟網頁並自動填入房號';
 
-      document.getElementById('btn-start-mp').classList.toggle('hidden', !state.isHost);
-      document.getElementById('btn-start-mp').disabled = state.lobbyPlayers.length < 4;
-      document.getElementById('lobby-status').textContent =
-        state.isHost
-          ? (state.lobbyPlayers.length < 4 ? '至少需要 4 人才能開始' : '可以開始遊戲了')
-          : '等待房主開始…';
-      document.getElementById('lobby-status').className =
-        'conn-status' + (state.lobbyPlayers.length >= 4 && state.isHost ? ' ok' : '');
+      // QR 產生（本機 file:// 常會失敗，需有後備顯示）
+      const canvas = document.getElementById('qr-canvas');
+      const hint = document.getElementById('qr-hint');
+      const isFile = location.protocol === 'file:';
+      let joinUrl = state.roomCode;
+      try {
+        if (!isFile && location.href && location.href.indexOf('http') === 0) {
+          const u = new URL(location.href);
+          u.searchParams.set('room', state.roomCode);
+          joinUrl = u.toString();
+        }
+      } catch (e) {}
+
+      // 清空舊內容
+      try {
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      } catch (e) {}
+
+      const showQrFallback = (msg) => {
+        try {
+          const ctx = canvas.getContext('2d');
+          const w = canvas.width;
+          const h = canvas.height;
+          ctx.fillStyle = '#2c1810';
+          ctx.fillRect(0, 0, w, h);
+          ctx.fillStyle = '#ffd166';
+          ctx.font = 'bold 28px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(state.roomCode, w / 2, h / 2 - 12);
+          ctx.fillStyle = '#b8a99a';
+          ctx.font = '12px sans-serif';
+          ctx.fillText('請手動輸入房號', w / 2, h / 2 + 22);
+        } catch (e) {}
+        hint.textContent = msg || '請讓其他人手動輸入上方房號加入';
+      };
+
+      if (typeof QRCode === 'undefined') {
+        showQrFallback('QR 函式庫未載入，請用房號加入');
+      } else {
+        try {
+          QRCode.toCanvas(canvas, joinUrl, {
+            width: 180,
+            margin: 2,
+            color: { dark: '#1a120b', light: '#ffffff' }
+          }, (err) => {
+            if (err) {
+              console.warn('QR error', err);
+              showQrFallback('QR 產生失敗，請用房號加入');
+            } else if (isFile) {
+              hint.textContent = '本機檔案：掃 QR 無法開網頁，請讓其他人輸入房號 ' + state.roomCode;
+            } else {
+              hint.textContent = '掃 QR 可自動帶入房號 · 或手動輸入 ' + state.roomCode;
+            }
+          });
+        } catch (e) {
+          console.warn(e);
+          showQrFallback('QR 產生失敗，請用房號加入');
+        }
+      }
+
+      updateStartButton();
+    }
+
+    function updateStartButton() {
+      const startBtn = document.getElementById('btn-start-mp');
+      const status = document.getElementById('lobby-status');
+      if (!startBtn) return;
+
+      if (state.isHost) {
+        // 房主一定看得到按鈕
+        startBtn.classList.remove('hidden');
+        const n = state.lobbyPlayers.length;
+        const canStart = n >= 4;
+        startBtn.disabled = !canStart;
+        startBtn.textContent = canStart
+          ? `開始遊戲（${n} 人）`
+          : `開始遊戲（還差 ${Math.max(0, 4 - n)} 人）`;
+        if (status) {
+          status.textContent = canStart
+            ? '人已到齊，可以開始！'
+            : `目前 ${n} 人，至少需要 4 人`;
+          status.className = 'conn-status' + (canStart ? ' ok' : '');
+        }
+      } else {
+        startBtn.classList.add('hidden');
+        if (status) {
+          status.textContent = '等待房主開始遊戲…';
+          status.className = 'conn-status';
+        }
+      }
     }
 
     function renderLobbyList() {
@@ -1567,8 +1630,7 @@
         list.appendChild(div);
       });
       document.getElementById('lobby-count').textContent = `${state.lobbyPlayers.length} / 8`;
-      const startBtn = document.getElementById('btn-start-mp');
-      if (startBtn) startBtn.disabled = state.lobbyPlayers.length < 4;
+      updateStartButton();
     }
 
     function joinRoom() {
